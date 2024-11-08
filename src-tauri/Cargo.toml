@@ -26,4 +26,9 @@ serde_json = "1"
 tauri-plugin-dialog = "2"
 rfd = { version = "0.15.0", default-features = false }
 tauri-plugin-store = "2"
+tokio = "1.41.0"
+futures = "0.3.31"
+thiserror = "1.0.68"
+chrono = { version = "0.4.38", features = ["serde"] }
+itertools = "0.13.0"
 
