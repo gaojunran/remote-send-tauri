@@ -7,9 +7,13 @@ const props = defineProps<{
 }>()
 
 import {listen} from "@tauri-apps/api/event";
-import {computed, ref, watch} from "vue";
+import {computed, inject, ref, watch} from "vue";
 import {Channel, invoke} from "@tauri-apps/api/core";
-import {store} from "./main.ts";
+import {Store} from "@tauri-apps/plugin-store";
+
+const store: {
+  content: Store | null;
+} = inject("store") || { content: null };
 
 const isOpen = defineModel()
 
@@ -38,7 +42,7 @@ const errorMsg = ref('');
 
 const bytesNow = ref(0);
 const percentNow = computed(() =>
-    ((bytesNow.value / (props.object?.size ?? 0)) * 100).toFixed(0)
+    Math.ceil((bytesNow.value / (props.object?.size ?? 0)) * 100)
 )
 
 listen<number>('download_started', (event) => {
@@ -68,12 +72,12 @@ const reset = () => {
 
 const openFile = async () => {
   await invoke("open", {
-    path: await store.get<string>("download_target")
+    path: await store.content?.get<string>("download_target")
   })
 }
 
 const openFolder = async () => {
-  const file = await store.get<string>("download_target") || "";
+  const file = await store.content?.get<string>("download_target") || "";
   await invoke("open", {
     path: file.replace(/\/[^/]*$/, "")  // remove the filename from the path
   });
@@ -96,7 +100,7 @@ const openFolder = async () => {
     </Message>
     <div class="mt-4 flex" v-if="isSuccess">
       <Button severity="info" icon="pi pi-file-check" label="Open" class="mr-1 text-xs" @click="openFile()"></Button>
-      <Button severity="info" icon="pi pi-folder" label="Open Folder" @click="openFolder()" class="ml-2 text-xs"></Button>
+      <Button severity="info" icon="pi pi-folder" label="Folder" @click="openFolder()" class="ml-2 text-xs"></Button>
     </div>
     <Button icon="pi pi-times" label="Cancel" @click="reset()" class="mt-8 w-full "
             severity="secondary"></Button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, onMounted, ref} from "vue";
+import {computed, onMounted, provide, ref} from "vue";
 import {invoke} from "@tauri-apps/api/core";
 import SendTransfer from "./SendTransfer.vue";
 import {load, Store} from "@tauri-apps/plugin-store";
@@ -7,8 +7,14 @@ import FileDisplay from "./FileDisplay.vue";
 import RecvTransfer from "./RecvTransfer.vue";
 import {listen} from "@tauri-apps/api/event";
 import {open} from "@tauri-apps/plugin-dialog";
-import {store} from "./main.ts";
 
+let store: {
+  content: Store | null;
+} = {
+  content: null
+};  // object using `new` is not well compatible with Vue `ref`, so using an object to wrap it.
+
+provide("store", store);  // provide store to all children components
 
 // states
 const bucketName = ref("");
@@ -45,14 +51,15 @@ const pickFile = async () => {
 }
 
 const saveSettings = async () => {
-  await store.set("region", region.value)
-  await store.set("endpoint", endpoint.value)
-  await store.set("bucket_name", bucketName.value)
-  await store.set("access_key", accessKey.value)
-  await store.set("secret_key", secretKey.value)
-  await store.set("auto_launch", isAutoLaunch.value)
-  await store.set("download_target", downloadTarget.value)
-  await store.save();
+  await store.content?.set("region", region.value)
+  await store.content?.set("endpoint", endpoint.value)
+  await store.content?.set("bucket_name", bucketName.value)
+  await store.content?.set("access_key", accessKey.value)
+  await store.content?.set("secret_key", secretKey.value)
+  await store.content?.set("auto_launch", isAutoLaunch.value)
+  await store.content?.set("download_target", downloadTarget.value)
+  await store.content?.save();
+  await getSettings();
   isSaveSettingsMsgVisible.value = true;
   setTimeout(() => {
     isSaveSettingsMsgVisible.value = false;
@@ -60,13 +67,13 @@ const saveSettings = async () => {
 }
 
 const getSettings = async () => {
-  bucketName.value = await store.get<string>("bucket_name") || "";
-  region.value = await store.get<string>("region") || "";
-  endpoint.value = await store.get<string>("endpoint") || "";
-  accessKey.value = await store.get<string>("access_key") || "";
-  secretKey.value = await store.get<string>("secret_key") || "";
-  isAutoLaunch.value = await store.get<boolean>("auto_launch") || false;
-  downloadTarget.value = await store.get<string>("download_target") || "";
+  bucketName.value = await store.content?.get<string>("bucket_name") || "";
+  region.value = await store.content?.get<string>("region") || "";
+  endpoint.value = await store.content?.get<string>("endpoint") || "";
+  accessKey.value = await store.content?.get<string>("access_key") || "";
+  secretKey.value = await store.content?.get<string>("secret_key") || "";
+  isAutoLaunch.value = await store.content?.get<boolean>("auto_launch") || false;
+  downloadTarget.value = await store.content?.get<string>("download_target") || "";
 }
 
 const beginSend = async () => {
@@ -113,6 +120,7 @@ listen<string>('glob_error', (event) => {
 })
 
 onMounted(async () => {
+  store.content = await load("store.json", {autoSave: true})
   await getSettings()
   if (isStorageConfigured) {
     expandSendPanel()
@@ -127,7 +135,8 @@ onMounted(async () => {
   <SendTransfer v-model="isSendDialogOpen"></SendTransfer>
   <RecvTransfer :object="recvFile || undefined" v-model="isRecvDialogOpen"></RecvTransfer>
   <div class="p-4">
-    <Message severity="error" closable @close="globalError = ''" v-if="globalError" variant="outlined" class="mb-4">
+    <Message severity="error" closable @close="globalError = ''" v-if="globalError" variant="outlined"
+             class="mb-4 break-all">
       {{ globalError }}
     </Message>
     <Panel toggleable header="Send" :collapsed="!isSendPanelOpen"
@@ -162,7 +171,7 @@ onMounted(async () => {
                 class="w-full flex justify-center" @click="peekLatestFile()"
         ></Button>
         <FileDisplay :name="recvFile?.key" :size="recvFile?.size" :last-time="recvFile?.last_modified"
-          v-if="hasRecvFile" class="mt-2"
+                     v-if="hasRecvFile" class="mt-2"
         ></FileDisplay>
         <Button icon="pi pi-check" label="Receive" severity="success"
                 class="mt-2 w-full flex justify-center" v-if="hasRecvFile" @click="beginRecv()"
