@@ -5,6 +5,10 @@
 ---
 - Refactor code;
 - Open received files or open its directory;
-- Send multiple files / a directory;
-- Receive multiple files / a directory;
+- Send multiple files / a directory(zip);
+- Receive multiple files / a directory(unzip);
 - Records
+- Support Android / iOS;
+- Auto start;
+- Keyboard shortcuts;
+- Dark/Light mode;

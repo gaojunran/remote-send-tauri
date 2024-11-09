@@ -6,6 +6,9 @@ import PrimeVue from 'primevue/config';
 import Aura from '@primevue/themes/aura';
 import {Button, Dialog, Fieldset, Panel, ProgressBar,
     FloatLabel, InputText, Divider, ToggleSwitch, Password, Message} from "primevue";
+import {load} from "@tauri-apps/plugin-store";
+
+export let store = await load("store.json", {autoSave: true});
 
 const app = createApp(App);
 app.use(PrimeVue, {

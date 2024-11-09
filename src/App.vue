@@ -6,8 +6,10 @@ import {load, Store} from "@tauri-apps/plugin-store";
 import FileDisplay from "./FileDisplay.vue";
 import RecvTransfer from "./RecvTransfer.vue";
 import {listen} from "@tauri-apps/api/event";
+import {open} from "@tauri-apps/plugin-dialog";
+import {store} from "./main.ts";
 
-let store: Store;
+
 // states
 const bucketName = ref("");
 const region = ref("");
@@ -15,6 +17,7 @@ const accessKey = ref("");
 const secretKey = ref("");
 const endpoint = ref("");
 const isAutoLaunch = ref(false);
+const downloadTarget = ref("");
 
 const isStorageConfigured = computed(() => {
   return bucketName.value && region.value && endpoint.value && accessKey.value && secretKey.value
@@ -33,19 +36,6 @@ const isRecvDialogOpen = ref(false);
 const hasSendFile = computed(() => !!sendFile.value);
 const hasRecvFile = computed(() => !!recvFile.value);
 
-interface FileDetail {
-  path: string;
-  name: string;
-  size: number;
-}
-
-interface ObjectDetail {
-  last_modified: string;
-  etag: string;
-  size: number;
-  key: string;
-}
-
 const sendFile = ref(null as FileDetail | null);
 const recvFile = ref(null as ObjectDetail | null);
 const globalError = ref("");
@@ -61,6 +51,7 @@ const saveSettings = async () => {
   await store.set("access_key", accessKey.value)
   await store.set("secret_key", secretKey.value)
   await store.set("auto_launch", isAutoLaunch.value)
+  await store.set("download_target", downloadTarget.value)
   await store.save();
   isSaveSettingsMsgVisible.value = true;
   setTimeout(() => {
@@ -75,6 +66,7 @@ const getSettings = async () => {
   accessKey.value = await store.get<string>("access_key") || "";
   secretKey.value = await store.get<string>("secret_key") || "";
   isAutoLaunch.value = await store.get<boolean>("auto_launch") || false;
+  downloadTarget.value = await store.get<string>("download_target") || "";
 }
 
 const beginSend = async () => {
@@ -82,9 +74,9 @@ const beginSend = async () => {
   await invoke("upload_file", {file: sendFile.value})
 }
 
+
 const beginRecv = async () => {
   isRecvDialogOpen.value = true;
-  await invoke("download_file", {object: recvFile.value})
 }
 
 const expandSendPanel = () => {
@@ -105,6 +97,11 @@ const expandSettingsPanel = () => {
   isRecvPanelOpen.value = false;
 }
 
+const pickDownloadTarget = async () => {
+  const result = await open({directory: true})
+  if (result) downloadTarget.value = result
+}
+
 const peekLatestFile = async () => {
   isPeekLatestLoading.value = true;
   recvFile.value = await invoke("peek_latest_file", {})
@@ -116,7 +113,6 @@ listen<string>('glob_error', (event) => {
 })
 
 onMounted(async () => {
-  store = await load("store.json", {autoSave: true});
   await getSettings()
   if (isStorageConfigured) {
     expandSendPanel()
@@ -129,7 +125,7 @@ onMounted(async () => {
 
 <template>
   <SendTransfer v-model="isSendDialogOpen"></SendTransfer>
-  <RecvTransfer :size="recvFile?.size ?? 0" v-model="isRecvDialogOpen"></RecvTransfer>
+  <RecvTransfer :object="recvFile || undefined" v-model="isRecvDialogOpen"></RecvTransfer>
   <div class="p-4">
     <Message severity="error" closable @close="globalError = ''" v-if="globalError" variant="outlined" class="mb-4">
       {{ globalError }}
@@ -210,6 +206,14 @@ onMounted(async () => {
       <div class="flex justify-between items-center mt-8">
         <div>Auto Launch</div>
         <ToggleSwitch checked v-model="isAutoLaunch"></ToggleSwitch>
+      </div>
+
+      <div class="flex justify-between items-center mt-4 text-sm">
+        <div>
+          <div>Download Target</div>
+          <div class="text-xs text-gray-500 break-all mr-4">{{ downloadTarget }}</div>
+        </div>
+        <Button severity="secondary" @click="pickDownloadTarget()" class="text-xs px-3">Select</Button>
       </div>
 
       <Button icon="pi pi-save" label="Save" severity="success"

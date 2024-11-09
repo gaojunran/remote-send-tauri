@@ -1,17 +1,15 @@
 mod s3_action;
 
-use std::cell::RefCell;
+use s3::error::S3Error;
+use s3::{Bucket, Region};
+use s3_action::push_file;
 use std::fs;
 use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use s3::{Bucket, Region};
-use s3::error::S3Error;
-use s3_action::push_file;
 use tauri_plugin_store::StoreExt;
 
+use crate::s3_action::{find_latest, list_files, pull_file, ObjectDetail, ChannelBytes};
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter};
-use crate::s3_action::{find_latest, list_files, ObjectDetail, RuntimeError};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct FileDetail {
@@ -40,7 +38,7 @@ async fn init_bucket(app: &AppHandle) -> Result<Box<Bucket>, S3Error> {
     s3
 }
 
-// #[cfg(not(target_os = "linux"))]
+
 #[tauri::command]
 async fn pick_file(app: tauri::AppHandle) -> Option<FileDetail> {
     let file_handle = rfd::AsyncFileDialog::new().pick_file().await?; // return None if user cancels
@@ -56,8 +54,8 @@ async fn pick_file(app: tauri::AppHandle) -> Option<FileDetail> {
 async fn peek_latest_file(app: tauri::AppHandle) -> Option<ObjectDetail> {
     if let Ok(bucket) = init_bucket(&app).await {
         let list_result;
-        match list_files(&None, &bucket, "/").await {
-            Ok(result) => { list_result = result; }
+        match list_files(&None, &bucket, "").await {
+            Ok(result) => { list_result = result}
             Err(e) => {
                 app.emit("glob_error", e.to_string());
                 return None;
@@ -117,13 +115,44 @@ async fn upload_file(app: tauri::AppHandle, file: FileDetail) {
     }
 }
 
+#[tauri::command]
+async fn download_file(app: tauri::AppHandle, object: ObjectDetail, event: Channel<ChannelBytes>) {
+    let store = app.store("store.json").unwrap();
+    // need to trim quotes as store won't deserialize for JSON
+    let download_location = store.get("download_target").expect("Download location not found").to_string().replace("\"", "");
+    let download_location = PathBuf::from(download_location).join(&object.key);
+    let bucket = init_bucket(&app).await.unwrap();
+    app.emit("download_started", 0).expect("Failed to emit event");
+    let start_time = std::time::Instant::now();
+    match pull_file(
+        &bucket,
+        &object,
+        &download_location,
+        event
+    ).await {
+        Ok(_) => {
+            let end_time = std::time::Instant::now();
+            let time_cost = (end_time - start_time).as_secs_f32();
+            app.emit("download_success", time_cost).expect("Failed to emit event");
+        }
+        Err(e) => {
+            app.emit("download_failed", e.to_string()).expect("Failed to emit event");
+        }
+    }
+}
+
+#[tauri::command]
+fn open(path: String) {
+    opener::open(&path).unwrap();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![pick_file, upload_file, peek_latest_file])
+        .invoke_handler(tauri::generate_handler![pick_file, upload_file, peek_latest_file, download_file, open])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

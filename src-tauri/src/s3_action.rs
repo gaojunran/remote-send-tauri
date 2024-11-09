@@ -8,6 +8,7 @@ use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
+use tauri::ipc::Channel;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ObjectDetail {
@@ -24,7 +25,12 @@ pub(crate) enum RuntimeError {
     #[error("Failure in S3-related operation: {0}.")]
     S3(S3Error),
     #[error("{0}")]
-    Io(io::Error)
+    Io(io::Error),
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct ChannelBytes {
+    value: u64,
 }
 
 pub(crate) fn find_latest(objects: &Vec<ObjectDetail>) -> Result<Option<ObjectDetail>, S3Error> {
@@ -44,7 +50,8 @@ fn get_keys(objects: &Vec<Object>) -> Vec<String> {
 pub(crate) async fn pull_file(
     bucket: &Box<Bucket>,
     object: &ObjectDetail,
-    file_path: &PathBuf
+    file_path: &PathBuf,
+    event: Channel<ChannelBytes>,
 ) -> Result<(), RuntimeError> {
     let mut stream = bucket.get_object_stream(object.key.clone()).await
         .map_err(|e| RuntimeError::S3(e))?;
@@ -55,7 +62,7 @@ pub(crate) async fn pull_file(
         let chunk = chunk.map_err(|e| RuntimeError::S3(e))?;
         file.write_all(&chunk).await.map_err(|e| RuntimeError::Io(e))?;
         accumulator += chunk.len() as u64;
-        println!("Downloaded {accumulator} bytes");
+        event.send(ChannelBytes { value: accumulator }).unwrap();  // using channel
     }
     Ok(())
 }
@@ -88,8 +95,8 @@ pub(crate) async fn list_files(
             last_modified: o.last_modified.parse().unwrap(),
             key: o.key.clone(),
             size: o.size,
-            etag: o.e_tag.clone().unwrap()
-    })
+            etag: o.e_tag.clone().unwrap(),
+        })
         .sorted_by_key(|o| o.last_modified.clone())
         .collect::<Vec<_>>();
     Ok(objects)
