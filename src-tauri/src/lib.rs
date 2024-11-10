@@ -59,6 +59,7 @@ async fn init_bucket(app: &AppHandle) -> Result<Box<Bucket>, S3Error> {
     s3
 }
 
+#[cfg(all(not(target_os = "android"), not(target_os = "ios")))]  // pc only
 #[tauri::command]
 async fn pick_file(app: tauri::AppHandle) -> Option<FileDetail> {
     let file_handle = rfd::AsyncFileDialog::new().pick_file().await?; // return None if user cancels
@@ -68,6 +69,15 @@ async fn pick_file(app: tauri::AppHandle) -> Option<FileDetail> {
         name: path.file_name().unwrap().to_str().unwrap().to_string(),
         size: fs::metadata(&path).unwrap().len(),
     })
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+async fn pick_file(app: tauri::AppHandle) -> Option<FileDetail> {
+    let file_path = app.dialog().file().blocking_pick_file();
+    if let Some(path) = file_path {
+
+    }
 }
 
 #[tauri::command]

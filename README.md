@@ -1,14 +1,20 @@
 ## Development Status
+Finished:
 - Send ONE file;
 - Receive ONE file;
 - Modify settings;
----
-- Refactor code;
 - Open received files or open its directory;
-- Send multiple files / a directory(zip);
-- Receive multiple files / a directory(unzip);
-- Records
-- Support Android / iOS;
 - Auto start;
-- Keyboard shortcuts;
 - Dark/Light mode;
+---
+Issues:
+- Auto start not working;
+---
+To-do:
+- Send texts;
+- Send multiple files(zip/unzip);
+- Drag and drop support;
+- Refactor code;
+- Records;
+- Support Android / iOS;
+- Keyboard shortcuts;

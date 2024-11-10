@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, onMounted, provide, ref} from "vue";
+import {computed, onMounted, provide, ref, watch} from "vue";
 import {invoke} from "@tauri-apps/api/core";
 import SendTransfer from "./SendTransfer.vue";
 import {load, Store} from "@tauri-apps/plugin-store";
@@ -7,6 +7,7 @@ import FileDisplay from "./FileDisplay.vue";
 import RecvTransfer from "./RecvTransfer.vue";
 import {listen} from "@tauri-apps/api/event";
 import {open} from "@tauri-apps/plugin-dialog";
+import {disable, enable} from "@tauri-apps/plugin-autostart";
 
 let store: {
   content: Store | null;
@@ -24,6 +25,7 @@ const secretKey = ref("");
 const endpoint = ref("");
 const isAutoLaunch = ref(false);
 const downloadTarget = ref("");
+const isDark = ref(false);
 
 const isStorageConfigured = computed(() => {
   return bucketName.value && region.value && endpoint.value && accessKey.value && secretKey.value
@@ -51,6 +53,10 @@ const pickFile = async () => {
 }
 
 const saveSettings = async () => {
+  // apply dark mode
+  isDark.value ? document.documentElement.classList.add('my-app-dark')
+      : document.documentElement.classList.remove('my-app-dark');
+
   await store.content?.set("region", region.value)
   await store.content?.set("endpoint", endpoint.value)
   await store.content?.set("bucket_name", bucketName.value)
@@ -58,12 +64,13 @@ const saveSettings = async () => {
   await store.content?.set("secret_key", secretKey.value)
   await store.content?.set("auto_launch", isAutoLaunch.value)
   await store.content?.set("download_target", downloadTarget.value)
+  await store.content?.set("is_dark", isDark.value)
   await store.content?.save();
-  await getSettings();
+  // await getSettings();
   isSaveSettingsMsgVisible.value = true;
   setTimeout(() => {
     isSaveSettingsMsgVisible.value = false;
-  }, 3500);
+  }, 2000);
 }
 
 const getSettings = async () => {
@@ -74,6 +81,7 @@ const getSettings = async () => {
   secretKey.value = await store.content?.get<string>("secret_key") || "";
   isAutoLaunch.value = await store.content?.get<boolean>("auto_launch") || false;
   downloadTarget.value = await store.content?.get<string>("download_target") || "";
+  isDark.value = await store.content?.get<boolean>("is_dark") || false;
 }
 
 const beginSend = async () => {
@@ -115,6 +123,11 @@ const peekLatestFile = async () => {
   isPeekLatestLoading.value = false;
 }
 
+watch(isDark, (newV, _) => {  // for dynamically previewing dark/light mode
+  newV ? document.documentElement.classList.add('my-app-dark')
+      : document.documentElement.classList.remove('my-app-dark');
+})
+
 listen<string>('glob_error', (event) => {
   globalError.value = event.payload
 })
@@ -122,11 +135,24 @@ listen<string>('glob_error', (event) => {
 onMounted(async () => {
   store.content = await load("store.json", {autoSave: true})
   await getSettings()
+
+  // apply auto launch
+  if (isAutoLaunch.value) {
+    await enable();
+  } else {
+    await disable();
+  }
+
+  // expand panel based on whether the storage is configured or not
   if (isStorageConfigured) {
     expandSendPanel()
   } else {
     expandSettingsPanel()
   }
+
+  // apply dark mode on start up
+  isDark.value ? document.documentElement.classList.add('my-app-dark')
+      : document.documentElement.classList.remove('my-app-dark');
 })
 </script>
 
@@ -143,12 +169,18 @@ onMounted(async () => {
            @toggle="expandSendPanel"
     >
       <div class="">
-        <Button icon="pi pi-file-plus" label="Pick a File" severity="secondary"
-                class="w-full flex justify-center" @click="pickFile()"
+        <div class="flex justify-between items-center mb-2">
+          <Button icon="pi pi-pen-to-square" label="Text" severity="secondary"
+                  class="w-1/2 flex justify-center mr-2" @click="pickFile()"
+          ></Button>
+          <Button icon="pi pi-image" label="Image" severity="secondary"
+                  class="w-1/2 flex justify-center" @click="pickFile()"
+          ></Button>
+        </div>
+        <Button icon="pi pi-file-plus" label="Add Files..." severity="secondary"
+                class="mt-2 w-full flex justify-center" @click="pickFile()"
         ></Button>
-        <Button icon="pi pi-clipboard" label="From Clipboard" severity="secondary"
-                class="mt-2 w-full flex justify-center"
-        ></Button>
+
         <FileDisplay :name="sendFile?.name" :size="sendFile?.size" v-if="hasSendFile" class="mt-2"/>
 
         <Button icon="pi pi-check" label="Send" severity="success"
@@ -165,7 +197,7 @@ onMounted(async () => {
     >
       <div class="">
         <Button icon="pi pi-download"
-                label="Peek Latest File"
+                label="Peek..."
                 :loading="isPeekLatestLoading"
                 severity="secondary"
                 class="w-full flex justify-center" @click="peekLatestFile()"
@@ -217,6 +249,11 @@ onMounted(async () => {
         <ToggleSwitch checked v-model="isAutoLaunch"></ToggleSwitch>
       </div>
 
+      <div class="flex justify-between items-center mt-4">
+        <div>Dark Mode</div>
+        <ToggleSwitch checked v-model="isDark"></ToggleSwitch>
+      </div>
+
       <div class="flex justify-between items-center mt-4 text-sm">
         <div>
           <div>Download Target</div>
@@ -225,11 +262,27 @@ onMounted(async () => {
         <Button severity="secondary" @click="pickDownloadTarget()" class="text-xs px-3">Select</Button>
       </div>
 
+<!--      <div class="flex justify-between items-center mt-4 text-sm">-->
+<!--        <div>-->
+<!--          <div>Keyboard Shortcut</div>-->
+<!--          <div class="text-xs text-gray-500 break-all mr-4">{{ downloadTarget }}</div>-->
+<!--        </div>-->
+<!--        <Button severity="secondary" @click="pickDownloadTarget()" class="text-xs px-3">Record</Button>-->
+<!--      </div>-->
+
+
+
+
       <Button icon="pi pi-save" label="Save" severity="success"
               class="mt-4 w-full" @click="saveSettings()" :disabled="isSaveSettingsMsgVisible"></Button>
       <Message severity="success" size="small" class="text-center mt-2"
-               :life="3000" v-if="isSaveSettingsMsgVisible">Save settings successfully!
+               :life="1500" v-if="isSaveSettingsMsgVisible">Save settings successfully!
       </Message>
+
+      <Button icon="pi pi-info-circle" label="About Us" severity="secondary" class="w-full mt-4" />
+
+<!--      <Divider/>-->
+
     </Panel>
   </div>
 </template>

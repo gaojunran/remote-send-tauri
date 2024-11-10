@@ -6,13 +6,14 @@ import PrimeVue from 'primevue/config';
 import Aura from '@primevue/themes/aura';
 import {Button, Dialog, Fieldset, Panel, ProgressBar,
     FloatLabel, InputText, Divider, ToggleSwitch, Password, Message} from "primevue";
-import {load} from "@tauri-apps/plugin-store";
-
 
 const app = createApp(App);
 app.use(PrimeVue, {
     theme: {
         preset: Aura,
+        options: {
+            darkModeSelector: ".my-app-dark"
+        }
     }
 });
 app.component("Button", Button);
@@ -29,12 +30,5 @@ app.component("Message", Message)
 
 app.mount("#app");
 
-// export const store = await load("store.json", {autoSave: true});
-//
-//
-// if (await store.get<boolean>("auto_launch")) {
-//     await enable();
-// } else {
-//     await disable();
-// }
+
 
