@@ -5,7 +5,7 @@ import App from "./App.vue";
 import PrimeVue from 'primevue/config';
 import Aura from '@primevue/themes/aura';
 import {Button, Dialog, Fieldset, Panel, ProgressBar,
-    FloatLabel, InputText, Divider, ToggleSwitch, Password, Message} from "primevue";
+    FloatLabel, InputText, Divider, ToggleSwitch, Password, Message, Textarea} from "primevue";
 
 const app = createApp(App);
 app.use(PrimeVue, {
@@ -27,6 +27,7 @@ app.component("Divider", Divider)
 app.component("ToggleSwitch", ToggleSwitch)
 app.component("Password", Password)
 app.component("Message", Message)
+app.component("Textarea", Textarea)
 
 app.mount("#app");
 

@@ -40,10 +40,12 @@ const isPeekLatestLoading = ref(false);
 
 const isSendDialogOpen = ref(false);
 const isRecvDialogOpen = ref(false);
+const isTextDialogOpen = ref(false);
 
 const hasSendFile = computed(() => !!sendFile.value);
 const hasRecvFile = computed(() => !!recvFile.value);
 
+const textContent = ref("");
 const sendFile = ref(null as FileDetail | null);
 const recvFile = ref(null as ObjectDetail | null);
 const globalError = ref("");
@@ -160,6 +162,10 @@ onMounted(async () => {
 <template>
   <SendTransfer v-model="isSendDialogOpen"></SendTransfer>
   <RecvTransfer :object="recvFile || undefined" v-model="isRecvDialogOpen"></RecvTransfer>
+  <Dialog v-model:visible="isTextDialogOpen" header="Text" modal :style="{width: '75%'}">
+    <Textarea v-model="textContent" class="w-full" rows="10"></Textarea>
+    <Button label="Save" severity="primary" icon="pi pi-check" class="mt-2 w-full" @click="textToFile()"></Button>
+  </Dialog>
   <div class="p-4">
     <Message severity="error" closable @close="globalError = ''" v-if="globalError" variant="outlined"
              class="mb-4 break-all">
@@ -171,7 +177,7 @@ onMounted(async () => {
       <div class="">
         <div class="flex justify-between items-center mb-2">
           <Button icon="pi pi-pen-to-square" label="Text" severity="secondary"
-                  class="w-1/2 flex justify-center mr-2" @click="pickFile()"
+                  class="w-1/2 flex justify-center mr-2" @click="isTextDialogOpen = true"
           ></Button>
           <Button icon="pi pi-image" label="Image" severity="secondary"
                   class="w-1/2 flex justify-center" @click="pickFile()"
