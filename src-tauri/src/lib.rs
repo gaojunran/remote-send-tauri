@@ -3,20 +3,37 @@ mod s3_action;
 use s3::error::S3Error;
 use s3::{Bucket, Region};
 use s3_action::push_file;
-use std::fs;
-use std::path::PathBuf;
+use std::{fs, io};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use rfd::FileHandle;
 use tauri_plugin_store::StoreExt;
 
 use crate::s3_action::{find_latest, list_files, pull_file, ChannelBytes, ObjectDetail};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_autostart::MacosLauncher;
+use tokio::io::AsyncReadExt;
+use zip::unstable::write::FileOptionsExt;
+use zip::write::{FileOptions, SimpleFileOptions};
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 struct FileDetail {
     path: String,
     name: String,
     size: u64,
+}
+
+impl FileDetail{
+    fn from_path<P: AsRef<Path>>(path: P) -> Self {
+        let path_buf = path.as_ref();
+        Self {
+            path: path_buf.to_str().unwrap().to_string(),
+            name: path_buf.file_name().unwrap().to_str().unwrap().to_string(),
+            size: fs::metadata(&path_buf).unwrap().len(),
+        }
+    }
 }
 
 async fn init_bucket(app: &AppHandle) -> Result<Box<Bucket>, S3Error> {
@@ -61,14 +78,12 @@ async fn init_bucket(app: &AppHandle) -> Result<Box<Bucket>, S3Error> {
 
 #[cfg(all(not(target_os = "android"), not(target_os = "ios")))]  // pc only
 #[tauri::command]
-async fn pick_file(app: tauri::AppHandle) -> Option<FileDetail> {
-    let file_handle = rfd::AsyncFileDialog::new().pick_file().await?; // return None if user cancels
-    let path = file_handle.path();
-    Some(FileDetail {
-        path: path.to_str().unwrap().to_string(),
-        name: path.file_name().unwrap().to_str().unwrap().to_string(),
-        size: fs::metadata(&path).unwrap().len(),
-    })
+async fn pick_files(app: tauri::AppHandle) -> Vec<FileDetail> {
+    let file_handle = rfd::AsyncFileDialog::new().pick_files().await;
+    let file_handle: Vec<FileHandle> = file_handle.unwrap_or_else(|| Vec::new());
+    file_handle.iter().map(|file| {
+        FileDetail::from_path(file.path())
+    }).collect()
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -177,6 +192,68 @@ fn open(path: String) {
     opener::open(&path).unwrap();
 }
 
+#[tauri::command]
+async fn zip_files(files: Vec<FileDetail>) -> FileDetail {
+    // find tmp dir joined with current timestamp
+    let zip_path = std::env::temp_dir()
+        .join(format!("remote-send-{}.zip", chrono::Local::now().timestamp()));
+    let zip_file = File::create(&zip_path);
+    let mut zip = zip::ZipWriter::new(zip_file.unwrap());
+    for mut file in files {
+        let options = SimpleFileOptions::default().compression_method(
+            zip::CompressionMethod::Stored,
+        );
+        let mut file_opened = File::open(file.path).unwrap();
+        let mut content = Vec::new();
+        file_opened.read_to_end(&mut content).unwrap(); // note: large memory usage here
+        zip.start_file(file.name, options).unwrap();
+        zip.write_all(&content).unwrap();
+    }
+    zip.finish().unwrap();
+    FileDetail::from_path(&zip_path)
+}
+
+#[tauri::command]
+async fn unzip_files(app:AppHandle, object: ObjectDetail) -> Vec<FileDetail> {
+    let store = app.store("store.json").unwrap();
+    let download_location = store
+        .get("download_target")
+        .expect("Download location not found")
+        .to_string()
+        .replace("\"", "");
+    let zip_location = PathBuf::from(download_location).join(&object.key);
+    let zip_file = File::open(&zip_location).unwrap();
+    let mut zip = zip::ZipArchive::new(zip_file).unwrap();
+    let mut files = Vec::new();
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i).unwrap();
+        let outpath = download_location.join(file.name());
+        println!("{:?}", outpath);
+        let mut outfile = File::create(&outpath).unwrap();
+        io::copy(&mut file, &mut outfile).unwrap();
+        files.push(FileDetail::from_path(&outpath));
+    }
+    files
+}
+
+#[tauri::command]
+fn text_to_file(text: String) -> FileDetail {
+    let timestamp = chrono::Local::now().timestamp();
+    let tmp_dir = std::env::temp_dir();
+    let path = tmp_dir.join(format!("remote-send-{}.txt", timestamp));
+    let mut file = File::create(&path).unwrap();
+    file.write_all(text.as_bytes()).unwrap();
+    FileDetail::from_path(&path)
+}
+
+#[tauri::command]
+fn file_to_text(file: FileDetail) -> String {
+    let mut file = File::open(file.path).unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    content
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -185,11 +262,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
-            pick_file,
+            pick_files,
             upload_file,
             peek_latest_file,
             download_file,
-            open
+            open,
+            zip_files,
+            unzip_files,
+            text_to_file,
+            file_to_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,6 +8,7 @@ import RecvTransfer from "./RecvTransfer.vue";
 import {listen} from "@tauri-apps/api/event";
 import {open} from "@tauri-apps/plugin-dialog";
 import {disable, enable} from "@tauri-apps/plugin-autostart";
+import {isText} from "./utils.ts";
 
 let store: {
   content: Store | null;
@@ -42,16 +43,19 @@ const isSendDialogOpen = ref(false);
 const isRecvDialogOpen = ref(false);
 const isTextDialogOpen = ref(false);
 
-const hasSendFile = computed(() => !!sendFile.value);
-const hasRecvFile = computed(() => !!recvFile.value);
-
-const textContent = ref("");
-const sendFile = ref(null as FileDetail | null);
+const sendFiles = ref([] as FileDetail[]);  // allow multiple files
 const recvFile = ref(null as ObjectDetail | null);
+
+const hasSendFile = computed(() => !!sendFiles.value.length);
+const hasRecvFile = computed(() => !!recvFile.value);
+const textContent = ref("");
 const globalError = ref("");
 
-const pickFile = async () => {
-  sendFile.value = await invoke("pick_file", {})
+const pickFiles = async () => {
+  const pickedFiles: FileDetail[] = await invoke("pick_files", {});
+  pickedFiles.filter(f => !sendFiles.value.includes(f)).forEach(f =>
+      sendFiles.value.push(f)  // action: duplicate files are ignored
+  )
 }
 
 const saveSettings = async () => {
@@ -88,7 +92,6 @@ const getSettings = async () => {
 
 const beginSend = async () => {
   isSendDialogOpen.value = true;
-  await invoke("upload_file", {file: sendFile.value})
 }
 
 
@@ -123,6 +126,21 @@ const peekLatestFile = async () => {
   isPeekLatestLoading.value = true;
   recvFile.value = await invoke("peek_latest_file", {})
   isPeekLatestLoading.value = false;
+}
+
+const textToFile = async () => {
+  const file: FileDetail = await invoke("text_to_file", {text: textContent.value});
+  // remove the last text file if exists
+  sendFiles.value = sendFiles.value.filter(f => !isText(f.name));
+  sendFiles.value.push(file);
+  isTextDialogOpen.value = false;
+}
+
+const popFile = (file: FileDetail) => {
+  const index = sendFiles.value.indexOf(file);
+  if (index !== -1) {
+    sendFiles.value.splice(index, 1);
+  }
 }
 
 watch(isDark, (newV, _) => {  // for dynamically previewing dark/light mode
@@ -160,12 +178,17 @@ onMounted(async () => {
 
 
 <template>
-  <SendTransfer v-model="isSendDialogOpen"></SendTransfer>
+  <SendTransfer :files="sendFiles" v-model="isSendDialogOpen"></SendTransfer>
   <RecvTransfer :object="recvFile || undefined" v-model="isRecvDialogOpen"></RecvTransfer>
+  <!-- Add Text Dialog -->
   <Dialog v-model:visible="isTextDialogOpen" header="Text" modal :style="{width: '75%'}">
-    <Textarea v-model="textContent" class="w-full" rows="10"></Textarea>
-    <Button label="Save" severity="primary" icon="pi pi-check" class="mt-2 w-full" @click="textToFile()"></Button>
+    <Textarea v-model="textContent" class="w-full" rows="6"></Textarea>
+    <div class="text-xs text-gray-500">You can only attach texts as one file at a time.</div>
+    <Button label="Save" severity="primary" icon="pi pi-check"
+            class="mt-2 w-full" @click="textToFile()"></Button>
   </Dialog>
+
+  <!-- Main Panel -->
   <div class="p-4">
     <Message severity="error" closable @close="globalError = ''" v-if="globalError" variant="outlined"
              class="mb-4 break-all">
@@ -180,14 +203,18 @@ onMounted(async () => {
                   class="w-1/2 flex justify-center mr-2" @click="isTextDialogOpen = true"
           ></Button>
           <Button icon="pi pi-image" label="Image" severity="secondary"
-                  class="w-1/2 flex justify-center" @click="pickFile()"
+                  class="w-1/2 flex justify-center" @click="pickFiles()"
           ></Button>
         </div>
         <Button icon="pi pi-file-plus" label="Add Files..." severity="secondary"
-                class="mt-2 w-full flex justify-center" @click="pickFile()"
+                class="mt-2 w-full flex justify-center" @click="pickFiles()"
         ></Button>
 
-        <FileDisplay :name="sendFile?.name" :size="sendFile?.size" v-if="hasSendFile" class="mt-2"/>
+        <FileDisplay
+            v-for="item in sendFiles" :key="item.name"
+            :name="item?.name" :size="item?.size"  :text="textContent" v-if="hasSendFile" class="mt-2"
+            :allow-delete="true" @delete="popFile(item)"
+        />
 
         <Button icon="pi pi-check" label="Send" severity="success"
                 class="mt-2 w-full flex justify-center" v-if="hasSendFile" @click="beginSend()"
@@ -268,17 +295,6 @@ onMounted(async () => {
         <Button severity="secondary" @click="pickDownloadTarget()" class="text-xs px-3">Select</Button>
       </div>
 
-<!--      <div class="flex justify-between items-center mt-4 text-sm">-->
-<!--        <div>-->
-<!--          <div>Keyboard Shortcut</div>-->
-<!--          <div class="text-xs text-gray-500 break-all mr-4">{{ downloadTarget }}</div>-->
-<!--        </div>-->
-<!--        <Button severity="secondary" @click="pickDownloadTarget()" class="text-xs px-3">Record</Button>-->
-<!--      </div>-->
-
-
-
-
       <Button icon="pi pi-save" label="Save" severity="success"
               class="mt-4 w-full" @click="saveSettings()" :disabled="isSaveSettingsMsgVisible"></Button>
       <Message severity="success" size="small" class="text-center mt-2"
@@ -286,8 +302,6 @@ onMounted(async () => {
       </Message>
 
       <Button icon="pi pi-info-circle" label="About Us" severity="secondary" class="w-full mt-4" />
-
-<!--      <Divider/>-->
 
     </Panel>
   </div>

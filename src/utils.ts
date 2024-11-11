@@ -30,3 +30,15 @@ export const formatTimeAgo = (lastTime: string) => {
     if (interval > 1) return `${interval} minutes ago`;
     return `${seconds} seconds ago`;
 };
+
+export const pathConcat = (parentPath: string, file: string) => {
+    if (parentPath.includes('/')) {
+        return `${parentPath}/${file}`;
+    } else {
+        return `${parentPath}\\${file}`;
+    }
+}
+
+export const isText = (name: string) => name.startsWith("remote-send") && name.endsWith(".txt");
+
+export const isZipped = (name: string) => name.startsWith("remote-send") && name.endsWith(".zip");
