@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use itertools::Itertools;
 use s3::error::S3Error;
-use s3::serde_types::Object;
 use s3::Bucket;
 use std::io;
 use std::path::PathBuf;
@@ -44,9 +43,9 @@ pub(crate) fn find_latest(objects: &Vec<ObjectDetail>) -> Result<Option<ObjectDe
     Ok(latest.cloned())
 }
 
-fn get_keys(objects: &Vec<Object>) -> Vec<String> {
-    objects.iter().map(|o| o.key.clone()).collect()
-}
+// fn get_keys(objects: &Vec<Object>) -> Vec<String> {
+//     objects.iter().map(|o| o.key.clone()).collect()
+// }
 
 pub(crate) async fn pull_file(
     bucket: &Box<Bucket>,
@@ -78,8 +77,7 @@ pub(crate) async fn push_file(
     file: &mut tokio::fs::File,
     target_key: &str,
 ) -> Result<(), RuntimeError> {
-    let mut stream = bucket
-        .put_object_stream(file, target_key)
+    bucket.put_object_stream(file, target_key)
         .await
         .map_err(|e| RuntimeError::S3(e))?;
     Ok(())

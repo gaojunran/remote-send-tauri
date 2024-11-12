@@ -16,7 +16,7 @@ const store: {
   content: Store | null;
 } = inject("store") || { content: null };
 
-const isOpen = defineModel()
+const isOpen = defineModel<boolean>()
 
 const channel = new Channel<ChannelBytes>();
 channel.onmessage = (msg) => {
@@ -50,10 +50,10 @@ const currFiles = ref([] as FileDetail[])
 const textContent = ref(null as string | null);
 
 const fileToText = async (file: FileDetail | undefined) => {
-  textContent.value = await invoke("file_to_text", {file: file});
+  if (file) textContent.value = await invoke("file_to_text", {file: file});
 }
 
-listen<number>('download_started', (event) => {
+listen<number>('download_started', (_) => {
   isStart.value = true;
   isSuccess.value = false;
   isFailed.value = false;
@@ -70,12 +70,18 @@ listen<number>('download_success', async (event) => {
     }]
   }
   await fileToText(currFiles.value.find(f => isText(f.name))); // get the text content to display
-  isSuccess.value = true;
-  bytesNow.value = props.object?.size ?? 0;
+  console.log(currFiles.value)
   timeCost.value = event.payload;
+  bytesNow.value = props.object?.size ?? 0;
+  isSuccess.value = true;
 })
 
 listen<string>('download_failed', (event) => {
+  isFailed.value = true;
+  errorMsg.value = event.payload;
+})
+
+listen<string>('unzip_failed', (event) => {
   isFailed.value = true;
   errorMsg.value = event.payload;
 })
@@ -92,13 +98,13 @@ const reset = () => {
 }
 
 // only available when there is ONE file sent
-const openFile = async () => {
-  let parent = await store.content?.get<string>("download_target");
-  let file = props.object?.key;
-  await invoke("open", {
-    path: pathConcat(parent!!, file!!),
-  })
-}
+// const openFile = async () => {
+//   let parent = await store.content?.get<string>("download_target");
+//   let file = props.object?.key;
+//   await invoke("open", {
+//     path: pathConcat(parent!!, file!!),
+//   })
+// }
 
 const openFolder = async () => {
   let path = await store.content?.get<string>("download_target");
@@ -111,27 +117,26 @@ const openFolder = async () => {
 
 <template>
   <Dialog v-model:visible="isOpen" modal :style="{width: '75%'}" :closable="false">
-    <div class="text-xl mb-8">Downloading...</div>
-    <div>
-      {{isStart}}, {{isSuccess}}, {{isFailed}}, {{currFiles}}
-    </div>
-    <ProgressBar mode="determinate" :value="percentNow" v-show="isStart"></ProgressBar>
-    <div class="text-xs text-white/50 mt-2" v-show="isStart">
+    <div class="text-xl mb-8" v-if="isWaiting">Downloading...</div>
+    <ProgressBar mode="determinate" :value="percentNow" v-show="isWaiting"></ProgressBar>
+    <div class="text-xs text-white/50 mt-2" v-show="isWaiting">
       {{ formatBytes(bytesNow) }} / {{ formatBytes(props.object?.size) }}
     </div>
-    <Message severity="success" size="small" class="text-center mt-2"
+    <Message severity="success" size="small" class="text-center mt-2 mb-4"
              v-if="isSuccess">Download successfully! Time cost: {{ timeCost.toFixed(2) }}s
     </Message>
-    <Message severity="error" size="small" class="mt-2 break-all"
+    <Message severity="error" size="small" class="mt-2 break-all mb-2"
              v-if="isFailed">{{ errorMsg }}
     </Message>
-    <FileDisplay v-for="file in currFiles" :key="file.path"
-                 :name="file.name" :size="file.size" :text="textContent" class="mt-2"></FileDisplay>
+    <FileDisplay v-for="file in currFiles" :key="file.path" v-if="isSuccess"
+                 :name="file.name" :size="file.size" :text="textContent || undefined" class="mt-2"
+                 :allow-copy-text="true"
+    ></FileDisplay>
     <div class="mt-4 flex" v-if="isSuccess">
 <!--      <Button severity="info" icon="pi pi-file-check" label="Open" class="mr-1 text-xs" @click="openFile()"></Button>-->
-<!--      <Button severity="info" icon="pi pi-folder" label="Folder" @click="openFolder()" class="ml-2 text-xs"></Button>-->
+      <Button severity="secondary" icon="pi pi-folder" label="Open Folder" @click="openFolder()" class="w-full"></Button>
     </div>
-    <Button icon="pi pi-times" label="Cancel" @click="reset()" class="mt-8 w-full "
+    <Button icon="pi pi-times" label="Cancel" @click="reset()" class="mt-2 w-full"
             severity="secondary"></Button>
   </Dialog>
 </template>

@@ -8,12 +8,13 @@ Finished:
 - Dark/Light mode;
 - Send texts;
 - Send multiple files(zip/unzip);
+- Refactor code;
 ---
   Issues:
+- Refactor logic for text content;
 - Auto start not working;
 ---
   To-do:
-- Refactor code;
 - Drag and drop support;
 ---
 Future:
@@ -24,6 +25,8 @@ Future:
 
 --- 
 sequence diagram for sending/receiving files:
+3 situations: single file; multiple files; text content
+4 states: transfer started; transfer success; transfer failed
 
 ```mermaid
 sequenceDiagram

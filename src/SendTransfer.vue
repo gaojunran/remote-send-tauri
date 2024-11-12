@@ -3,7 +3,7 @@ import {listen} from "@tauri-apps/api/event";
 import {computed, ref, watch} from "vue";
 import {invoke} from "@tauri-apps/api/core";
 
-const isOpen = defineModel()
+const isOpen = defineModel<boolean>()
 const props = defineProps<{ files: FileDetail[] }>()
 
 const isStart = ref(false);
@@ -28,7 +28,7 @@ watch(isOpen, async (newVal, _) => {
   }
 })
 
-listen<number>('upload_started', (event) => {
+listen<number>('upload_started', (_) => {
   isStart.value = true;
   isSuccess.value = false;
   isFailed.value = false;

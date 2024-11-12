@@ -7,7 +7,6 @@ import FileDisplay from "./FileDisplay.vue";
 import RecvTransfer from "./RecvTransfer.vue";
 import {listen} from "@tauri-apps/api/event";
 import {open} from "@tauri-apps/plugin-dialog";
-import {disable, enable} from "@tauri-apps/plugin-autostart";
 import {isText} from "./utils.ts";
 
 let store: {
@@ -42,6 +41,7 @@ const isPeekLatestLoading = ref(false);
 const isSendDialogOpen = ref(false);
 const isRecvDialogOpen = ref(false);
 const isTextDialogOpen = ref(false);
+const isAboutUsDialogOpen = ref(false);
 
 const sendFiles = ref([] as FileDetail[]);  // allow multiple files
 const recvFile = ref(null as ObjectDetail | null);
@@ -156,12 +156,12 @@ onMounted(async () => {
   store.content = await load("store.json", {autoSave: true})
   await getSettings()
 
-  // apply auto launch
-  if (isAutoLaunch.value) {
-    await enable();
-  } else {
-    await disable();
-  }
+  // // apply auto launch
+  // if (isAutoLaunch.value) {
+  //   await enable();
+  // } else {
+  //   await disable();
+  // }
 
   // expand panel based on whether the storage is configured or not
   if (isStorageConfigured) {
@@ -186,6 +186,25 @@ onMounted(async () => {
     <div class="text-xs text-gray-500">You can only attach texts as one file at a time.</div>
     <Button label="Save" severity="primary" icon="pi pi-check"
             class="mt-2 w-full" @click="textToFile()"></Button>
+  </Dialog>
+  <!-- About Us Dialog -->
+  <Dialog v-model:visible="isAboutUsDialogOpen" header="About Us" modal :style="{width: '75%'}">
+    <div class="">
+      <p class="text-sm">
+        Note: RemoteSend does not retain any data on its server. All client requests are managed exclusively through your designated S3 service provider.
+      </p>
+      <Divider class="py-2"/>
+      <p>
+        See more on <a href="https://github.com/gaojunran/remote-send-tauri" target="_blank" class="text-blue-500">GitHub</a>
+      </p>
+
+      <p class="mt-2">
+        Built with <a href="https://tauri.studio/" target="_blank" class="text-blue-500">Tauri</a>,
+        <a href="https://vuejs.org/" target="_blank" class="text-blue-500">Vue3</a>,
+        <a href="https://tailwindcss.com/" target="_blank" class="text-blue-500">Tailwind CSS</a>,
+        <a href="https://primevue.org" target="_blank" class="text-blue-500">PrimeVue</a>.
+      </p>
+    </div>
   </Dialog>
 
   <!-- Main Panel -->
@@ -229,13 +248,13 @@ onMounted(async () => {
            @toggle="expandRecvPanel"
     >
       <div class="">
-        <Button icon="pi pi-download"
+        <Button icon="pi pi-search"
                 label="Peek..."
                 :loading="isPeekLatestLoading"
                 severity="secondary"
                 class="w-full flex justify-center" @click="peekLatestFile()"
         ></Button>
-        <FileDisplay :name="recvFile?.key" :size="recvFile?.size" :last-time="recvFile?.last_modified"
+        <FileDisplay :name="recvFile?.key ?? ''" :size="recvFile?.size" :last-time="recvFile?.last_modified"
                      v-if="hasRecvFile" class="mt-2"
         ></FileDisplay>
         <Button icon="pi pi-check" label="Receive" severity="success"
@@ -301,7 +320,7 @@ onMounted(async () => {
                :life="1500" v-if="isSaveSettingsMsgVisible">Save settings successfully!
       </Message>
 
-      <Button icon="pi pi-info-circle" label="About Us" severity="secondary" class="w-full mt-4" />
+      <Button icon="pi pi-info-circle" label="About Us" @click="isAboutUsDialogOpen = true" severity="secondary" class="w-full mt-4" />
 
     </Panel>
   </div>

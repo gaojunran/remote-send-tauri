@@ -17,7 +17,7 @@ export const formatTimeAgo = (lastTime: string) => {
     if (!lastTime) return '';
     const now = new Date();
     const date = new Date(lastTime);
-    const seconds = Math.floor((now - date) / 1000);
+    const seconds = Math.floor((now.getSeconds() - date.getSeconds()));
     let interval = Math.floor(seconds / 31536000);
     if (interval > 1) return `${interval} years ago`;
     interval = Math.floor(seconds / 2592000);
