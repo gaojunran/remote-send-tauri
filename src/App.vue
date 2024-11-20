@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed, onMounted, provide, ref, watch} from "vue";
+import * as path from "@tauri-apps/api/path"
 import {invoke} from "@tauri-apps/api/core";
 import SendTransfer from "./SendTransfer.vue";
 import {load, Store} from "@tauri-apps/plugin-store";
@@ -27,9 +28,7 @@ const isAutoLaunch = ref(false);
 const downloadTarget = ref("");
 const isDark = ref(false);
 
-const isStorageConfigured = computed(() => {
-  return bucketName.value && region.value && endpoint.value && accessKey.value && secretKey.value
-});
+const isStorageConfigured = ref(false);
 
 const isSendPanelOpen = ref(false);
 const isRecvPanelOpen = ref(false);
@@ -50,6 +49,7 @@ const hasSendFile = computed(() => !!sendFiles.value.length);
 const hasRecvFile = computed(() => !!recvFile.value);
 const textContent = ref("");
 const globalError = ref("");
+
 
 const pickFiles = async () => {
   const pickedFiles: FileDetail[] = await invoke("pick_files", {});
@@ -72,7 +72,7 @@ const saveSettings = async () => {
   await store.content?.set("download_target", downloadTarget.value)
   await store.content?.set("is_dark", isDark.value)
   await store.content?.save();
-  // await getSettings();
+  await getSettings();
   isSaveSettingsMsgVisible.value = true;
   setTimeout(() => {
     isSaveSettingsMsgVisible.value = false;
@@ -88,6 +88,8 @@ const getSettings = async () => {
   isAutoLaunch.value = await store.content?.get<boolean>("auto_launch") || false;
   downloadTarget.value = await store.content?.get<string>("download_target") || "";
   isDark.value = await store.content?.get<boolean>("is_dark") || false;
+
+  isStorageConfigured.value = (region.value && endpoint.value && bucketName.value && accessKey.value && secretKey.value);
 }
 
 const beginSend = async () => {
@@ -173,6 +175,11 @@ onMounted(async () => {
   // apply dark mode on start up
   isDark.value ? document.documentElement.classList.add('my-app-dark')
       : document.documentElement.classList.remove('my-app-dark');
+
+  // apply default download target
+  if (downloadTarget.value === "") {
+    downloadTarget.value = await path.downloadDir();
+  }
 })
 </script>
 
@@ -213,6 +220,9 @@ onMounted(async () => {
              class="mb-4 break-all">
       {{ globalError }}
     </Message>
+    <Message severity="warn" size="small" class="mb-4"
+             v-if="!isStorageConfigured">Configure S3 Storage before you start!
+    </Message>
     <Panel toggleable header="Send" :collapsed="!isSendPanelOpen"
            @toggle="expandSendPanel"
     >
@@ -237,6 +247,7 @@ onMounted(async () => {
 
         <Button icon="pi pi-check" label="Send" severity="success"
                 class="mt-2 w-full flex justify-center" v-if="hasSendFile" @click="beginSend()"
+                :disabled="!isStorageConfigured"
         ></Button>
 
       </div>
@@ -253,12 +264,15 @@ onMounted(async () => {
                 :loading="isPeekLatestLoading"
                 severity="secondary"
                 class="w-full flex justify-center" @click="peekLatestFile()"
+                :disabled="!isStorageConfigured"
         ></Button>
         <FileDisplay :name="recvFile?.key ?? ''" :size="recvFile?.size" :last-time="recvFile?.last_modified"
                      v-if="hasRecvFile" class="mt-2"
         ></FileDisplay>
         <Button icon="pi pi-check" label="Receive" severity="success"
-                class="mt-2 w-full flex justify-center" v-if="hasRecvFile" @click="beginRecv()"
+                class="mt-2 w-full flex justify-center"
+                v-if="hasRecvFile" @click="beginRecv()"
+                :disabled="!isStorageConfigured"
         ></Button>
       </div>
     </Panel>
@@ -269,30 +283,34 @@ onMounted(async () => {
     <Panel toggleable header="Settings" :collapsed="!isSettingsPanelOpen"
            @toggle="expandSettingsPanel()"
     >
-      <Message severity="warn" size="small" class="mb-2"
-               v-if="!isStorageConfigured">Configure S3 Storage before you start!
-      </Message>
       <div class="mb-4">S3 Storage</div>
-      <FloatLabel variant="in" class="mt-2">
-        <InputText id="region" v-model="region" class="w-full"></InputText>
-        <label for="region">Region</label>
-      </FloatLabel>
-      <FloatLabel variant="in" class="mt-2">
-        <InputText id="endpoint" v-model="endpoint" class="w-full"></InputText>
-        <label for="endpoint">Endpoint</label>
-      </FloatLabel>
-      <FloatLabel variant="in" class="mt-2">
-        <InputText id="bucket_name" v-model="bucketName" class="w-full"></InputText>
-        <label for="bucket_name">Bucket Name</label>
-      </FloatLabel>
-      <FloatLabel variant="in" class="mt-2">
-        <InputText id="access_key" v-model="accessKey" class="w-full"></InputText>
-        <label for="access_key">Access Key</label>
-      </FloatLabel>
-      <FloatLabel variant="in" class="mt-2">
-        <Password id="secret_key" :feedback="false" v-model="secretKey" class="w-full"></Password>
-        <label for="secret_key">Secret Key</label>
-      </FloatLabel>
+      <div v-if="!isStorageConfigured">
+        <FloatLabel variant="in" class="mt-2">
+          <InputText id="region" v-model="region" class="w-full"></InputText>
+          <label for="region">Region</label>
+        </FloatLabel>
+        <FloatLabel variant="in" class="mt-2">
+          <InputText id="endpoint" v-model="endpoint" class="w-full"></InputText>
+          <label for="endpoint">Endpoint</label>
+        </FloatLabel>
+        <FloatLabel variant="in" class="mt-2">
+          <InputText id="bucket_name" v-model="bucketName" class="w-full"></InputText>
+          <label for="bucket_name">Bucket Name</label>
+        </FloatLabel>
+        <FloatLabel variant="in" class="mt-2">
+          <InputText id="access_key" v-model="accessKey" class="w-full"></InputText>
+          <label for="access_key">Access Key</label>
+        </FloatLabel>
+        <FloatLabel variant="in" class="mt-2">
+          <InputText id="secret_key" v-model="secretKey" class="w-full"></InputText>
+          <label for="secret_key">Secret Key</label>
+        </FloatLabel>
+      </div>
+      <div v-if="isStorageConfigured" class="flex justify-between items-center">
+        <div>Already configured.</div>
+        <Button icon="pi pi-times" severity="secondary" class="ml-2 h-8 w-8" @click="isStorageConfigured = false"></Button>
+      </div>
+
 
       <Divider/>
 

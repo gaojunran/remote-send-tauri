@@ -1,20 +1,20 @@
 mod s3_action;
 
+use rfd::FileHandle;
 use s3::error::S3Error;
 use s3::{Bucket, Region};
 use s3_action::push_file;
-use std::{fs, io};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use rfd::FileHandle;
+use std::{fs, io};
 use tauri_plugin_store::StoreExt;
 
 use crate::s3_action::{find_latest, list_files, pull_file, ChannelBytes, ObjectDetail};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_autostart::MacosLauncher;
-use zip::write::{SimpleFileOptions};
+use zip::write::SimpleFileOptions;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 struct FileDetail {
@@ -81,28 +81,43 @@ async fn init_bucket(app: &AppHandle) -> Result<Box<Bucket>, S3Error> {
     s3
 }
 
-#[cfg(all(not(target_os = "android"), not(target_os = "ios")))]  // pc only
+#[cfg(all(not(target_os = "android"), not(target_os = "ios")))] // pc only
 #[tauri::command]
 async fn pick_files(_app: AppHandle) -> Vec<FileDetail> {
     let file_handle = rfd::AsyncFileDialog::new().pick_files().await;
     let file_handle: Vec<FileHandle> = file_handle.unwrap_or_else(|| Vec::new());
-    file_handle.iter().map(|file| {
-        FileDetail::from_path(file.path())
-    }).collect()
+    file_handle
+        .iter()
+        .map(|file| FileDetail::from_path(file.path()))
+        .collect()
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command]
 async fn pick_files(app: tauri::AppHandle) -> Vec<FileDetail> {
-    let files = app.dialog().file().blocking_pick_files().unwrap_or_default();
-    files.iter().map(|&file| {
-        let path = file.into_path();
-        FileDetail {
-            path: path.clone().unwrap().to_str().unwrap().to_string(),
-            name: path.clone().unwrap().file_name().unwrap().to_str().unwrap().to_string(),
-            size: fs::metadata(path.clone().unwrap()).unwrap().len(),
-        }
-    }).collect()
+    let files = app
+        .dialog()
+        .file()
+        .blocking_pick_files()
+        .unwrap_or_default();
+    files
+        .iter()
+        .map(|&file| {
+            let path = file.into_path();
+            FileDetail {
+                path: path.clone().unwrap().to_str().unwrap().to_string(),
+                name: path
+                    .clone()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
+                size: fs::metadata(path.clone().unwrap()).unwrap().len(),
+            }
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -122,7 +137,8 @@ async fn peek_latest_file(app: tauri::AppHandle) -> Option<ObjectDetail> {
                 app.emit(
                     "glob_error",
                     "No file found currently. Maybe you need to `send` first?",
-                ).unwrap();
+                )
+                .unwrap();
                 None
             }
             Err(e) => {
@@ -140,11 +156,12 @@ async fn upload_file(app: AppHandle, file: FileDetail) {
     if let Ok(bucket) = init_bucket(&app).await {
         let path = PathBuf::from(file.path);
         if !path.exists() {
-            app.emit("upload_failed", "File does not exist!".to_string()).unwrap();
+            app.emit("upload_failed", "File does not exist!".to_string())
+                .unwrap();
             return;
         }
         let mut file = match tokio::fs::File::open(&path).await {
-            Ok(file) => { file }
+            Ok(file) => file,
             Err(_) => {
                 app.emit("upload_failed",
                          "Unable to open this file. Maybe you are occupying the file or have no permission to access it?".to_string()).unwrap();
@@ -206,14 +223,15 @@ fn open(path: String) {
 #[tauri::command]
 async fn zip_files(app: AppHandle, files: Vec<FileDetail>) -> FileDetail {
     // find tmp dir joined with current timestamp
-    let zip_path = std::env::temp_dir()
-        .join(format!("remote-send-{}.zip", chrono::Local::now().timestamp()));
+    let zip_path = std::env::temp_dir().join(format!(
+        "remote-send-{}.zip",
+        chrono::Local::now().timestamp()
+    ));
     let zip_file = File::create(&zip_path);
     let mut zip = zip::ZipWriter::new(zip_file.unwrap());
     for file in files {
-        let options = SimpleFileOptions::default().compression_method(
-            zip::CompressionMethod::Stored,
-        );
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         let mut file_opened = match File::open(file.path) {
             Ok(file) => file,
             Err(_) => {
@@ -223,7 +241,7 @@ async fn zip_files(app: AppHandle, files: Vec<FileDetail>) -> FileDetail {
             }
         };
         let mut content = Vec::new();
-        let zip_action = || -> Result<(), io::Error>{
+        let zip_action = || -> Result<(), io::Error> {
             file_opened.read_to_end(&mut content)?; // note: large memory usage here
             zip.start_file(file.name, options)?;
             zip.write_all(&content)?;
@@ -233,7 +251,6 @@ async fn zip_files(app: AppHandle, files: Vec<FileDetail>) -> FileDetail {
             app.emit("zip_failed", e.to_string()).unwrap();
             return FileDetail::default();
         }
-
     }
     zip.finish().unwrap();
     FileDetail::from_path(&zip_path)
@@ -264,7 +281,11 @@ async fn unzip_files(app: AppHandle, object: ObjectDetail) -> Vec<FileDetail> {
         let mut outfile = match File::create(&out_path) {
             Ok(file) => file,
             Err(_) => {
-                app.emit("unzip_failed", "Unable to create file when unzipping.".to_string()).unwrap();
+                app.emit(
+                    "unzip_failed",
+                    "Unable to create file when unzipping.".to_string(),
+                )
+                .unwrap();
                 return Vec::new();
             }
         };
@@ -297,7 +318,11 @@ fn file_to_text(file: FileDetail) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())

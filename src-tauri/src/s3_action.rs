@@ -77,7 +77,8 @@ pub(crate) async fn push_file(
     file: &mut tokio::fs::File,
     target_key: &str,
 ) -> Result<(), RuntimeError> {
-    bucket.put_object_stream(file, target_key)
+    bucket
+        .put_object_stream(file, target_key)
         .await
         .map_err(|e| RuntimeError::S3(e))?;
     Ok(())
