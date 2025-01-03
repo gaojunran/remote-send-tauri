@@ -1,4 +1,13 @@
+# Remote Send
+
+## Introduction
+
+A file transfer tool for you to exchange files between your multiple devices. Based on S3 Storage.
+
+Developed with Tauri and Vite/Vue3. Currently all PC platforms are ready for production, but Android/iOS are not ready.
+
 ## Development Status
+
 Finished:
 - Send ONE file;
 - Receive ONE file;
@@ -10,11 +19,11 @@ Finished:
 - Send multiple files(zip/unzip);
 - Refactor code;
 ---
-  Issues:
+Issues:
 - Refactor logic for text content;
 - Auto start not working;
 ---
-  To-do:
+To-do:
 - Drag and drop support;
 ---
 Future:
